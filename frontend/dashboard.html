@@ -1,0 +1,320 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>TactiVision | Dashboard</title>
+<link rel="stylesheet" href="/frontend/estilo.css">
+</head>
+<body>
+<div class="layout">
+<aside class="barra-lateral">
+<div class="marca">Tacti<span>Vision</span></div>
+<nav>
+<a class="ativo" href="#dashboard">Dashboard</a>
+<a href="#campeonatos">Campeonatos</a>
+<a href="#partidas">Partidas</a>
+<a href="#atletas">Atletas</a>
+<a href="#videos">Vídeos</a>
+<a href="#metricas">Métricas</a>
+<a href="#alertas">Alertas</a>
+<a href="#perfil">Perfil</a>
+<button id="sair" class="link-botao">Sair</button>
+</nav>
+</aside>
+<main class="conteudo">
+<header class="cabecalho">
+<div><p class="eyebrow">INTELIGÊNCIA ESPORTIVA</p><h1>TactiVision</h1><p>Transforme partidas em dados para apoiar a comissão técnica.</p></div>
+<div id="usuario-logado"></div>
+</header>
+<section id="dashboard" class="secao">
+<div class="grade-cards" id="cards"></div>
+<div class="painel">
+<h2>Fluxo de análise</h2>
+<div class="fluxo"><span>Vídeo</span><b>→</b><span>YOLO</span><b>→</b><span>ByteTrack</span><b>→</b><span>Métricas</span><b>→</b><span>Regras</span><b>→</b><span>Alertas</span></div>
+<p class="nota">A IA auxilia a análise. A interpretação final dos resultados permanece com o profissional.</p>
+</div>
+</section>
+<section id="campeonatos" class="secao">
+<div class="cabecalho-secao"><h2>Campeonatos</h2><button onclick="abrirForm('campeonato')">Novo campeonato</button></div>
+<div id="lista-campeonatos" class="lista"></div>
+</section>
+<section id="partidas" class="secao">
+<div class="cabecalho-secao"><h2>Partidas</h2><button onclick="abrirForm('partida')">Nova partida</button></div>
+<div id="lista-partidas" class="lista"></div>
+</section>
+<section id="atletas" class="secao">
+<div class="cabecalho-secao"><h2>Atletas</h2><button onclick="abrirForm('atleta')">Novo atleta</button></div>
+<div class="filtros"><input id="filtro-posicao" placeholder="Posição"><input id="filtro-clube" placeholder="Clube"><input id="filtro-idade" type="number" min="0" max="120" placeholder="Idade"><button id="filtrar-atletas">Filtrar</button></div>
+<div id="lista-atletas" class="lista"></div>
+</section>
+<section id="videos" class="secao">
+<div class="cabecalho-secao"><h2>Vídeos</h2></div>
+<div class="painel">
+<form id="form-video" class="form-linha">
+<select id="video-partida" required></select>
+<input type="file" id="video-arquivo" accept=".mp4,.avi,.mov,.mkv,.webm" required>
+<button id="botao-enviar-video">Enviar vídeo</button>
+</form>
+<p class="nota">Formatos: MP4, AVI, MOV, MKV e WEBM. Limite local: 2 GB.</p>
+</div>
+<div id="lista-videos" class="lista"></div>
+</section>
+<section id="metricas" class="secao">
+<div class="cabecalho-secao"><h2>Métricas</h2></div>
+<div id="lista-metricas" class="lista"></div>
+</section>
+<section id="alertas" class="secao">
+<div class="cabecalho-secao"><h2>Alertas de desorganização</h2></div>
+<div id="lista-alertas" class="lista"></div>
+</section>
+<section id="perfil" class="secao">
+<div class="cabecalho-secao"><h2>Perfil</h2></div>
+<div class="painel" id="perfil-dados"></div>
+</section>
+</main>
+</div>
+<div id="modal" class="modal escondido"><div class="modal-caixa"><button class="fechar" id="fechar-modal">×</button><div id="modal-conteudo"></div></div></div>
+<script src="/frontend/script.js"></script>
+<script>
+const estado = { campeonatos: [], partidas: [] };
+const elementos = {
+    usuario: document.getElementById("usuario-logado"),
+    perfil: document.getElementById("perfil-dados"),
+    cards: document.getElementById("cards"),
+    campeonatos: document.getElementById("lista-campeonatos"),
+    partidas: document.getElementById("lista-partidas"),
+    atletas: document.getElementById("lista-atletas"),
+    videos: document.getElementById("lista-videos"),
+    metricas: document.getElementById("lista-metricas"),
+    alertas: document.getElementById("lista-alertas"),
+    videoPartida: document.getElementById("video-partida"),
+    videoArquivo: document.getElementById("video-arquivo"),
+    modal: document.getElementById("modal"),
+    modalConteudo: document.getElementById("modal-conteudo")
+};
+
+function escapar(valor) {
+    return String(valor ?? "").replace(/[&<>'"]/g, caractere => ({"&":"&amp;","<":"&lt;",">":"&gt;","'":"&#39;","\"":"&quot;"}[caractere]));
+}
+
+function vazio(texto) {
+    return `<div class="vazio">${escapar(texto)}</div>`;
+}
+
+async function iniciar() {
+    const resposta = await api("/usuario");
+    if (!resposta.ok) {
+        location.href = "/frontend/login.html";
+        return;
+    }
+    elementos.usuario.innerHTML = `<strong>${escapar(resposta.data.nome)}</strong><span>${escapar(resposta.data.cargo)}</span>`;
+    elementos.perfil.innerHTML = `<p><b>${escapar(resposta.data.nome)}</b></p><p>${escapar(resposta.data.cargo)}</p><p>${escapar(resposta.data.email)}</p>`;
+    await Promise.all([carregarDashboard(), carregarCampeonatos(), carregarPartidas(), carregarAtletas(), carregarVideos(), carregarMetricas(), carregarAlertas()]);
+}
+
+async function carregarDashboard() {
+    const resposta = await api("/dashboard");
+    if (!resposta.ok) return;
+    const rotulos = {
+        campeonatos: "Campeonatos",
+        partidas: "Partidas",
+        atletas: "Atletas",
+        videos: "Vídeos",
+        videos_processados: "Vídeos processados",
+        videos_pendentes: "Vídeos pendentes",
+        alertas: "Alertas"
+    };
+    elementos.cards.innerHTML = Object.entries(resposta.data).map(([chave, valor]) => `<div class="card"><span>${escapar(rotulos[chave] || chave)}</span><strong>${escapar(valor)}</strong></div>`).join("");
+}
+
+async function carregarCampeonatos() {
+    const resposta = await api("/campeonatos");
+    if (!resposta.ok) return;
+    estado.campeonatos = resposta.data;
+    elementos.campeonatos.innerHTML = resposta.data.map(c => `<div class="item"><div><strong>${escapar(c.nome)}</strong><span>Temporada ${escapar(c.temporada)} · ${c.partidas} partidas</span></div></div>`).join("") || vazio("Nenhum campeonato cadastrado.");
+}
+
+async function carregarPartidas() {
+    const resposta = await api("/partidas");
+    if (!resposta.ok) return;
+    estado.partidas = resposta.data;
+    elementos.videoPartida.innerHTML = resposta.data.length ? resposta.data.map(p => `<option value="${p.id}">${escapar(p.data_partida)} · ${escapar(p.adversario)}</option>`).join("") : `<option value="">Cadastre uma partida primeiro</option>`;
+    elementos.partidas.innerHTML = resposta.data.map(p => `<div class="item"><div><strong>${escapar(p.data_partida)} · ${escapar(p.adversario)}</strong><span>${escapar(p.campeonato)} · ${p.videos} vídeos · ${p.metricas} métricas</span></div></div>`).join("") || vazio("Nenhuma partida cadastrada.");
+}
+
+async function carregarAtletas() {
+    const params = new URLSearchParams();
+    const posicao = document.getElementById("filtro-posicao").value.trim();
+    const clube = document.getElementById("filtro-clube").value.trim();
+    const idade = document.getElementById("filtro-idade").value;
+    if (posicao) params.set("posicao", posicao);
+    if (clube) params.set("clube", clube);
+    if (idade) params.set("idade", idade);
+    const resposta = await api(`/atletas/filtro?${params.toString()}`);
+    if (!resposta.ok) return;
+    elementos.atletas.innerHTML = resposta.data.map(a => `<div class="item"><div><strong>${escapar(a.nome)}</strong><span>${escapar(a.posicao)} · ${escapar(a.clube_atual)} · ${a.idade} anos</span></div><small>${a.metricas.length} métricas</small></div>`).join("") || vazio("Nenhum atleta encontrado.");
+}
+
+async function carregarVideos() {
+    const resposta = await api("/videos");
+    if (!resposta.ok) return;
+    elementos.videos.innerHTML = resposta.data.map(v => {
+        const podeProcessar = v.status === "PENDENTE" || v.status === "ERRO";
+        return `<div class="item"><div><strong>${escapar(v.nome)}</strong><span>${escapar(v.partida)} · ${escapar(v.usuario)}</span></div><div><span class="status ${escapar(v.status.toLowerCase())}">${escapar(v.status)}</span>${podeProcessar ? `<button onclick="processarVideo(${v.id})">${v.status === "ERRO" ? "Tentar novamente" : "Processar"}</button>` : ""}<button onclick="verResultado(${v.id})">Resultado</button></div></div>`;
+    }).join("") || vazio("Nenhum vídeo enviado.");
+    if (resposta.data.some(v => v.status === "PROCESSANDO")) setTimeout(carregarVideos, 4000);
+}
+
+async function carregarMetricas() {
+    const resposta = await api("/metricas");
+    if (!resposta.ok) return;
+    elementos.metricas.innerHTML = resposta.data.map(m => `<div class="item"><div><strong>${escapar(m.atleta)}</strong><span>${escapar(m.partida)}</span></div><span>${Number(m.distancia_total).toFixed(3)} un · máx. ${Number(m.velocidade_maxima).toFixed(3)} un/s</span></div>`).join("") || vazio("Ainda não existem métricas consolidadas.");
+}
+
+async function carregarAlertas() {
+    const resposta = await api("/alertas");
+    if (!resposta.ok) return;
+    elementos.alertas.innerHTML = resposta.data.map(a => `<div class="item alerta"><div><strong>${escapar(a.atleta)}</strong><span>${escapar(a.video)} · ${Number(a.timestamp_video).toFixed(2)} s</span></div><span>${escapar(a.mensagem)}</span></div>`).join("") || vazio("Nenhum alerta registrado.");
+}
+
+function abrirForm(tipo) {
+    const formularios = {
+        campeonato: `<h2>Novo campeonato</h2><form id="form-campeonato"><input id="fc-nome" placeholder="Nome" required maxlength="150"><input id="fc-temporada" placeholder="2026" required maxlength="30"><button>Cadastrar</button></form>`,
+        partida: `<h2>Nova partida</h2><form id="form-partida"><select id="fp-campeonato" required>${estado.campeonatos.map(c => `<option value="${c.id}">${escapar(c.nome)} · ${escapar(c.temporada)}</option>`).join("")}</select><input id="fp-data" type="date" required><input id="fp-adversario" placeholder="Adversário" required maxlength="150"><button>Cadastrar</button></form>`,
+        atleta: `<h2>Novo atleta</h2><form id="form-atleta"><input id="fa-nome" placeholder="Nome" required maxlength="150"><input id="fa-nascimento" type="date" required><input id="fa-posicao" placeholder="Posição" required maxlength="50"><input id="fa-clube" placeholder="Clube" required maxlength="150"><button>Cadastrar</button></form>`
+    };
+    if (tipo === "partida" && !estado.campeonatos.length) {
+        elementos.modalConteudo.innerHTML = `<h2>Cadastre um campeonato primeiro</h2><p class="nota">Uma partida precisa estar vinculada a um campeonato.</p>`;
+    } else {
+        elementos.modalConteudo.innerHTML = formularios[tipo];
+        if (tipo === "campeonato") document.getElementById("form-campeonato").addEventListener("submit", salvarCampeonato);
+        if (tipo === "partida") document.getElementById("form-partida").addEventListener("submit", salvarPartida);
+        if (tipo === "atleta") document.getElementById("form-atleta").addEventListener("submit", salvarAtleta);
+    }
+    elementos.modal.classList.remove("escondido");
+}
+
+function fecharForm() {
+    elementos.modal.classList.add("escondido");
+    elementos.modalConteudo.innerHTML = "";
+}
+
+async function salvarCampeonato(evento) {
+    evento.preventDefault();
+    const r = await api("/campeonatos", {method: "POST", body: JSON.stringify({nome: document.getElementById("fc-nome").value, temporada: document.getElementById("fc-temporada").value})});
+    if (!r.ok) { alert(r.data.detail || "Não foi possível cadastrar o campeonato."); return; }
+    fecharForm();
+    await Promise.all([carregarCampeonatos(), carregarDashboard()]);
+}
+
+async function salvarPartida(evento) {
+    evento.preventDefault();
+    const r = await api("/partidas", {method: "POST", body: JSON.stringify({campeonato_id: Number(document.getElementById("fp-campeonato").value), data_partida: document.getElementById("fp-data").value, adversario: document.getElementById("fp-adversario").value})});
+    if (!r.ok) { alert(r.data.detail || "Não foi possível cadastrar a partida."); return; }
+    fecharForm();
+    await Promise.all([carregarPartidas(), carregarDashboard()]);
+}
+
+async function salvarAtleta(evento) {
+    evento.preventDefault();
+    const r = await api("/atletas", {method: "POST", body: JSON.stringify({nome: document.getElementById("fa-nome").value, data_nascimento: document.getElementById("fa-nascimento").value, posicao: document.getElementById("fa-posicao").value, clube_atual: document.getElementById("fa-clube").value})});
+    if (!r.ok) { alert(r.data.detail || "Não foi possível cadastrar o atleta."); return; }
+    fecharForm();
+    await Promise.all([carregarAtletas(), carregarDashboard()]);
+}
+
+document.getElementById("form-video").addEventListener("submit", async evento => {
+    evento.preventDefault();
+    if (!elementos.videoPartida.value || !elementos.videoArquivo.files.length) return;
+    const botao = document.getElementById("botao-enviar-video");
+    botao.disabled = true;
+    const dados = new FormData();
+    dados.append("partida_id", elementos.videoPartida.value);
+    dados.append("arquivo", elementos.videoArquivo.files[0]);
+    const resposta = await api("/videos", {method: "POST", body: dados});
+    botao.disabled = false;
+    if (!resposta.ok) { alert(resposta.data.detail || "Não foi possível enviar o vídeo."); return; }
+    elementos.videoArquivo.value = "";
+    await Promise.all([carregarVideos(), carregarDashboard()]);
+});
+
+async function processarVideo(id) {
+    const resposta = await api(`/videos/${id}/processar`, {method: "POST"});
+    if (!resposta.ok) { alert(resposta.data.detail || "Não foi possível iniciar o processamento."); return; }
+    await carregarVideos();
+}
+
+function desenharCampo(ctx, largura, altura) {
+    ctx.fillStyle = "#0b1626";
+    ctx.fillRect(0, 0, largura, altura);
+    ctx.strokeStyle = "#58708f";
+    ctx.lineWidth = 2;
+    ctx.strokeRect(20, 20, largura - 40, altura - 40);
+    ctx.beginPath();
+    ctx.moveTo(largura / 2, 20);
+    ctx.lineTo(largura / 2, altura - 20);
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.arc(largura / 2, altura / 2, Math.min(largura, altura) * 0.12, 0, Math.PI * 2);
+    ctx.stroke();
+}
+
+function desenharMapaCalor(ctx, logs, largura, altura) {
+    const colunas = 35;
+    const linhas = 19;
+    const contagens = Array.from({length: linhas}, () => Array(colunas).fill(0));
+    let maior = 0;
+    for (const log of logs) {
+        const coluna = Math.min(colunas - 1, Math.max(0, Math.floor(log.pos_x * colunas)));
+        const linha = Math.min(linhas - 1, Math.max(0, Math.floor(log.pos_y * linhas)));
+        contagens[linha][coluna] += 1;
+        maior = Math.max(maior, contagens[linha][coluna]);
+    }
+    if (!maior) return;
+    const larguraCelula = largura / colunas;
+    const alturaCelula = altura / linhas;
+    for (let linha = 0; linha < linhas; linha++) {
+        for (let coluna = 0; coluna < colunas; coluna++) {
+            const intensidade = contagens[linha][coluna] / maior;
+            if (!intensidade) continue;
+            ctx.fillStyle = `rgba(56, 189, 248, ${0.10 + intensidade * 0.55})`;
+            ctx.fillRect(coluna * larguraCelula, linha * alturaCelula, larguraCelula + 1, alturaCelula + 1);
+        }
+    }
+}
+
+async function verResultado(id) {
+    const resposta = await api(`/videos/${id}`);
+    if (!resposta.ok) { alert(resposta.data.detail || "Não foi possível carregar o resultado."); return; }
+    const dados = resposta.data;
+    const largura = 760;
+    const altura = 410;
+    const logs = dados.logs || [];
+    elementos.modalConteudo.innerHTML = `<h2>${escapar(dados.nome)}</h2><p>Status: <b>${escapar(dados.status)}</b> · ${escapar(dados.partida)}</p><canvas id="mapa" width="${largura}" height="${altura}"></canvas><div class="resultado-resumo"><span>${dados.jogadores_rastreados.length} jogadores técnicos</span><span>${logs.length} registros exibidos</span><span>${dados.jogadores_rastreados.reduce((total, item) => total + item.alertas, 0)} alertas</span></div><p class="nota">Mapa de calor construído a partir das posições reais armazenadas. A intensidade representa concentração de registros, não uma avaliação tática definitiva.</p>`;
+    elementos.modal.classList.remove("escondido");
+    const canvas = document.getElementById("mapa");
+    const ctx = canvas.getContext("2d");
+    desenharCampo(ctx, largura, altura);
+    desenharMapaCalor(ctx, logs, largura, altura);
+    for (const log of logs) {
+        ctx.fillStyle = log.alerta_desorganizacao ? "#ef4444" : "#f8fafc";
+        ctx.beginPath();
+        ctx.arc(log.pos_x * largura, log.pos_y * altura, 2, 0, Math.PI * 2);
+        ctx.fill();
+    }
+}
+
+document.getElementById("fechar-modal").addEventListener("click", fecharForm);
+document.getElementById("filtrar-atletas").addEventListener("click", carregarAtletas);
+document.getElementById("sair").addEventListener("click", async () => {
+    await api("/logout", {method: "POST"});
+    location.href = "/frontend/login.html";
+});
+elementos.modal.addEventListener("click", evento => {
+    if (evento.target === elementos.modal) fecharForm();
+});
+iniciar();
+</script>
+</body>
+</html>

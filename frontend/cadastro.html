@@ -1,0 +1,44 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>TactiVision | Cadastro</title>
+<link rel="stylesheet" href="/frontend/estilo.css">
+</head>
+<body class="pagina-autenticacao">
+<main class="cartao-autenticacao">
+<div class="marca">Tacti<span>Vision</span></div>
+<p class="subtitulo">Crie seu acesso à plataforma.</p>
+<form id="form-cadastro">
+<label>Nome<input id="nome" required></label>
+<label>Cargo<input id="cargo" placeholder="Analista de desempenho" required></label>
+<label>E-mail<input type="email" id="email" required></label>
+<label>Senha<input type="password" id="senha" minlength="8" maxlength="72" required></label>
+<label>Confirmar senha<input type="password" id="confirmar" minlength="8" maxlength="72" required></label>
+<button type="submit">Criar conta</button>
+<p id="mensagem" class="mensagem"></p>
+</form>
+<a href="/frontend/login.html">Já tenho uma conta</a>
+</main>
+<script src="/frontend/script.js"></script>
+<script>
+document.getElementById("form-cadastro").addEventListener("submit", async (evento) => {
+    evento.preventDefault();
+    const nome = document.getElementById("nome");
+    const cargo = document.getElementById("cargo");
+    const email = document.getElementById("email");
+    const senha = document.getElementById("senha");
+    const confirmar = document.getElementById("confirmar");
+    const mensagem = document.getElementById("mensagem");
+    if (senha.value !== confirmar.value) { mensagem.textContent = "As senhas não coincidem."; return; }
+    const resposta = await api("/usuarios", {
+        method: "POST",
+        body: JSON.stringify({nome: nome.value, cargo: cargo.value, email: email.value, senha: senha.value})
+    });
+    if (resposta.ok) location.href = "/frontend/login.html";
+    else mensagem.textContent = resposta.data.detail || "Não foi possível criar a conta.";
+});
+</script>
+</body>
+</html>
